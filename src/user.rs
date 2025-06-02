@@ -1,6 +1,6 @@
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 use log::{debug, error, info, trace, warn};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct User {
@@ -23,13 +23,13 @@ impl User {
             .get("https://lib.mardens.com/auth/users")
             .send()
             .await?;
-        
+
         trace!("Received response with status: {}", response.status());
-        
+
         if !response.status().is_success() {
             warn!("Failed to get users: HTTP {}", response.status());
         }
-        
+
         let users: Vec<Self> = response.json().await?;
         info!("Successfully retrieved {} users", users.len());
         Ok(users)
@@ -45,76 +45,110 @@ impl User {
             ))
             .send()
             .await?;
-        
+
         trace!("Received response with status: {}", response.status());
-        
+
         if !response.status().is_success() {
             warn!("Failed to query users: HTTP {}", response.status());
         }
-        
+
         let users: Vec<Self> = response.json().await?;
-        info!("Found {} users matching query '{}'", users.len(), username.as_ref());
+        info!(
+            "Found {} users matching query '{}'",
+            users.len(),
+            username.as_ref()
+        );
         Ok(users)
     }
 
     pub async fn authenticate_user(
         username: impl AsRef<str>,
         password: impl AsRef<str>,
+        user_agent: impl AsRef<str>,
     ) -> Result<Option<String>> {
         debug!("Attempting to authenticate user: {}", username.as_ref());
-        let client = reqwest::Client::builder().build()?;
-        let form = reqwest::multipart::Form::new()
-            .text("username", username.as_ref().to_string())
-            .text("password", password.as_ref().to_string());
-        
-        trace!("Sending authentication request for user {}", username.as_ref());
+        let client = reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()?;
+
+        let form = [
+            ("username", username.as_ref()),
+            ("password", password.as_ref()),
+        ];
+
+        trace!(
+            "Sending authentication request for user {}",
+            username.as_ref()
+        );
         let response = client
             .post("https://lib.mardens.com/auth/")
-            .header("Content-Type", "multipart/form-data")
+            .form(&form) // Use form instead of multipart
             .header("Accept", "application/json")
-            .multipart(form)
+            .header("User-Agent", user_agent.as_ref())
             .send()
             .await?;
-        
-        trace!("Received authentication response with status: {}", response.status());
-        
+
+        trace!(
+            "Received authentication response with status: {}",
+            response.status()
+        );
+
+        // Parse the JSON response
         let json: serde_json::Value = response.json().await?;
-        if !json
+
+        // Check the success flag
+        let success = json
             .get("success")
             .and_then(|s| s.as_bool())
-            .unwrap_or(false)
-        {
-            let error_message = json.get("message").and_then(|m| m.as_str()).unwrap_or("");
-            error!("Authentication failed for user {}: {}", username.as_ref(), error_message);
-            return Err(anyhow::anyhow!("{}", error_message));
-        }
-        
+            .unwrap_or(false);
+
+        // Get message and token values
+        let message = json.get("message").and_then(|m| m.as_str()).unwrap_or("");
         let token = json.get("token").and_then(|t| t.as_str()).map(String::from);
+
+        if !success {
+            // Log the error but don't return an error
+            error!(
+                "Authentication failed for user {}: {}",
+                username.as_ref(),
+                message
+            );
+            return Ok(None);
+        }
+
         if token.is_some() {
             info!("User {} successfully authenticated", username.as_ref());
         } else {
-            warn!("Authentication succeeded but no token returned for user {}", username.as_ref());
+            warn!(
+                "Authentication succeeded but no token returned for user {}",
+                username.as_ref()
+            );
         }
-        
+
         Ok(token)
     }
 
-    pub async fn authenticate_user_with_token(token: impl AsRef<str>) -> Result<Option<String>> {
+    pub async fn authenticate_user_with_token(
+        token: impl AsRef<str>,
+        user_agent: impl AsRef<str>,
+    ) -> Result<()> {
         debug!("Authenticating with token");
         let client = reqwest::Client::builder().build()?;
-        let form = reqwest::multipart::Form::new().text("token", token.as_ref().to_string());
-        
+
         trace!("Sending token authentication request");
         let response = client
             .post("https://lib.mardens.com/auth/")
-            .header("Content-Type", "multipart/form-data")
             .header("Accept", "application/json")
-            .multipart(form)
+            .header("User-Agent", user_agent.as_ref())
+            .form(&[("token", token.as_ref())])
             .send()
             .await?;
-        
-        trace!("Received token authentication response with status: {}", response.status());
-        
+
+        trace!(
+            "Received token authentication response with status: {}",
+            response.status()
+        );
+
         let json: serde_json::Value = response.json().await?;
         if !json
             .get("success")
@@ -125,46 +159,59 @@ impl User {
             error!("Token authentication failed: {}", error_message);
             return Err(anyhow::anyhow!("{}", error_message));
         }
-        
-        let new_token = json.get("token").and_then(|t| t.as_str()).map(String::from);
-        if new_token.is_some() {
-            info!("Successfully authenticated with token");
-        } else {
-            warn!("Token authentication succeeded but no new token returned");
-        }
-        
-        Ok(new_token)
+
+        Ok(())
     }
 
-    pub async fn register_user(username: impl AsRef<str>, password: impl AsRef<str>) -> Result<()> {
+    pub async fn register_user(
+        username: impl AsRef<str>,
+        password: impl AsRef<str>,
+        user_agent: impl AsRef<str>,
+    ) -> Result<()> {
         info!("Registering new user: {}", username.as_ref());
         let client = reqwest::Client::builder().build()?;
-        let form = reqwest::multipart::Form::new()
-            .text("username", username.as_ref().to_string())
-            .text("password", password.as_ref().to_string());
-        
-        debug!("Sending registration request for user {}", username.as_ref());
+
+        let form = [
+            ("username", username.as_ref()),
+            ("password", password.as_ref()),
+        ];
+
+        debug!(
+            "Sending registration request for user {}",
+            username.as_ref()
+        );
         let response = client
             .post("https://lib.mardens.com/auth/register")
-            .header("Content-Type", "multipart/form-data")
+            .form(&form) // Use form instead of multipart
             .header("Accept", "application/json")
-            .multipart(form)
+            .header("User-Agent", user_agent.as_ref())
             .send()
             .await?;
-        
-        trace!("Received registration response with status: {}", response.status());
-        
+
+        trace!(
+            "Received registration response with status: {}",
+            response.status()
+        );
+
+        // Parse the JSON response
         let json: serde_json::Value = response.json().await?;
-        if !json
+
+        // Check the success flag
+        let success = json
             .get("success")
             .and_then(|s| s.as_bool())
-            .unwrap_or(false)
-        {
+            .unwrap_or(false);
+
+        if !success {
             let error_message = json.get("message").and_then(|m| m.as_str()).unwrap_or("");
-            error!("User registration failed for {}: {}", username.as_ref(), error_message);
+            error!(
+                "User registration failed for {}: {}",
+                username.as_ref(),
+                error_message
+            );
             return Err(anyhow::anyhow!("{}", error_message));
         }
-        
+
         info!("Successfully registered user {}", username.as_ref());
         Ok(())
     }

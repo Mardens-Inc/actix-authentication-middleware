@@ -52,6 +52,10 @@ where
         let service = self.service.clone();
         debug!("Processing authentication middleware request");
         Box::pin(async move {
+            let user_agent = req.headers()
+                                .get("User-Agent")
+                                .and_then(|s| s.to_str().ok())
+                                .unwrap_or("Mardens Actix Auth Library");
             let token = match req.headers().get("X-Authentication") {
                 Some(auth_header) => {
                     trace!("Found X-Authentication header");
@@ -59,7 +63,7 @@ where
                         trace!("Successfully parsed X-Authentication header");
                         s.to_string()
                     })
-                },
+                }
                 None => {
                     trace!("X-Authentication header not found, checking for token cookie");
                     let cookie_token = req.cookie("token").map(|c| {
@@ -67,13 +71,13 @@ where
                         c.value().to_string()
                     });
                     cookie_token
-                },
+                }
             };
-        
+
             match token {
                 Some(token) => {
                     debug!("Authentication token found, attempting to authenticate");
-                    if let Err(e) = User::authenticate_user_with_token(&token).await {
+                    if let Err(e) = User::authenticate_user_with_token(&token, &user_agent).await {
                         error!("Failed to authenticate user: {}", e.to_string());
                         Err(ErrorUnauthorized(format!(
                             "Failed to authenticate user: {}",
@@ -87,7 +91,7 @@ where
                 _ => {
                     warn!("Request rejected: Missing or invalid authentication token");
                     Err(ErrorUnauthorized("Missing or invalid authentication token"))
-                },
+                }
             }
         })
     }
