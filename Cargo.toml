@@ -1,6 +1,6 @@
 [package]
 name = "actix-authentication-middleware"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 
 [dependencies]
@@ -11,3 +11,7 @@ serde_json = { version = ">=1.0.100" }
 reqwest = { version = ">=0.12", features = ["json", "multipart"] }
 anyhow = ">=1"
 log = { version = ">=0.4" }
+
+[dev-dependencies]
+tokio = {version = "1.45.1", features = ["macros"]}
+pretty_env_logger = {version = "0.5.0"}
