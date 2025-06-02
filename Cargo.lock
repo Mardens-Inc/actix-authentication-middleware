@@ -9,6 +9,7 @@ dependencies = [
  "actix-web",
  "anyhow",
  "futures",
+ "log",
  "reqwest",
  "serde",
  "serde_json",

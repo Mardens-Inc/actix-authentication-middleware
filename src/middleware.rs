@@ -4,6 +4,7 @@ use actix_web::dev::{ServiceRequest, ServiceResponse, Transform};
 use actix_web::error::ErrorUnauthorized;
 use actix_web::Error;
 use futures::future::{ready, LocalBoxFuture, Ready};
+use log::{debug, error, info, trace, warn};
 use std::rc::Rc;
 
 pub struct Authentication;
@@ -49,18 +50,44 @@ where
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let service = self.service.clone();
-
+        debug!("Processing authentication middleware request");
         Box::pin(async move {
             let token = match req.headers().get("X-Authentication") {
-                Some(auth_header) => auth_header.to_str().ok().map(|s| s.to_string()),
-                None => req.cookie("token").map(|c| c.value().to_string()),
+                Some(auth_header) => {
+                    trace!("Found X-Authentication header");
+                    auth_header.to_str().ok().map(|s| {
+                        trace!("Successfully parsed X-Authentication header");
+                        s.to_string()
+                    })
+                },
+                None => {
+                    trace!("X-Authentication header not found, checking for token cookie");
+                    let cookie_token = req.cookie("token").map(|c| {
+                        trace!("Found token cookie");
+                        c.value().to_string()
+                    });
+                    cookie_token
+                },
             };
-
+        
             match token {
-                Some(token) if User::authenticate_user_with_token(&token).await.is_ok() => {
-                    service.call(req).await
+                Some(token) => {
+                    debug!("Authentication token found, attempting to authenticate");
+                    if let Err(e) = User::authenticate_user_with_token(&token).await {
+                        error!("Failed to authenticate user: {}", e.to_string());
+                        Err(ErrorUnauthorized(format!(
+                            "Failed to authenticate user: {}",
+                            e.to_string()
+                        )))
+                    } else {
+                        info!("User successfully authenticated, proceeding with request");
+                        service.call(req).await
+                    }
                 }
-                _ => Err(ErrorUnauthorized("Missing or invalid authentication token")),
+                _ => {
+                    warn!("Request rejected: Missing or invalid authentication token");
+                    Err(ErrorUnauthorized("Missing or invalid authentication token"))
+                },
             }
         })
     }
