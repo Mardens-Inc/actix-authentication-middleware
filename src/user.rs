@@ -172,14 +172,6 @@ impl User {
                 .and_then(|m| m.as_str())
                 .unwrap_or("Unknown authentication error");
             error!("Token authentication failed - Status: {}, Message: {}", status, error_message);
-            if status.is_client_error() {
-                return Err(anyhow::anyhow!(json!({
-                    "error": "Client error",
-                    "message": error_message,
-                    "status": status.as_u16(),
-                    "body": body,
-                })));
-            }
             return Err(anyhow::anyhow!(json!({
                 "error": "Authentication failed",
                 "message": error_message,
