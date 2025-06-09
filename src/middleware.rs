@@ -79,10 +79,7 @@ where
                     debug!("Authentication token found, attempting to authenticate");
                     if let Err(e) = User::authenticate_user_with_token(&token, &user_agent).await {
                         error!("Failed to authenticate user: {}", e.to_string());
-                        Err(ErrorUnauthorized(format!(
-                            "Failed to authenticate user: {}",
-                            e.to_string()
-                        )))
+                        Err(ErrorUnauthorized(e))
                     } else {
                         info!("User successfully authenticated, proceeding with request");
                         service.call(req).await
