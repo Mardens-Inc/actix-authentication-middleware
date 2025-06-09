@@ -133,7 +133,7 @@ impl User {
         user_agent: impl AsRef<str>,
     ) -> Result<()> {
         debug!("Authenticating with token");
-        let client = reqwest::Client::builder().build()?;
+        let client = reqwest::Client::builder().danger_accept_invalid_certs(true).build()?;
 
         trace!("Sending token authentication request");
         let response = client
