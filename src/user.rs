@@ -1,6 +1,7 @@
 use anyhow::Result;
 use log::{debug, error, info, trace, warn};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct User {
@@ -132,34 +133,52 @@ impl User {
         token: impl AsRef<str>,
         user_agent: impl AsRef<str>,
     ) -> Result<()> {
-        debug!("Authenticating with token");
-        let client = reqwest::Client::builder().danger_accept_invalid_certs(true).build()?;
+        debug!("Authenticating with token: {}", token.as_ref());
+        let client = reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .map_err(|e| anyhow::anyhow!("Failed to build HTTP client: {}", e))?;
 
-        trace!("Sending token authentication request");
+        trace!("Sending token authentication request to https://lib.mardens.com/auth/");
         let response = client
             .post("https://lib.mardens.com/auth/")
             .header("Accept", "application/json")
             .header("User-Agent", user_agent.as_ref())
             .form(&[("token", token.as_ref())])
             .send()
-            .await?;
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to send authentication request: {}", e))?;
+        let status = response.status();
 
         trace!(
-            "Received token authentication response with status: {}",
+            "Received token authentication response with status: {} ({})",
+            response.status().as_u16(),
             response.status()
         );
+        let body = response.text().await.map_err(|e| anyhow::anyhow!("Failed to read response body: {}", e))?;
+        let json = serde_json::from_str::<serde_json::Value>(&body).map_err(|e| anyhow::anyhow!(json!({
+            "message": "Failed to parse JSON response",
+            "error": e.to_string(),
+            "body": body,
+        })))?;
 
-        let json: serde_json::Value = response.json().await?;
         if !json
             .get("success")
             .and_then(|s| s.as_bool())
             .unwrap_or(false)
         {
-            let error_message = json.get("message").and_then(|m| m.as_str()).unwrap_or("");
-            error!("Token authentication failed: {}", error_message);
-            return Err(anyhow::anyhow!("{}", error_message));
+            let error_message = json
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("Unknown authentication error");
+            error!("Token authentication failed - Status: {}, Message: {}", status, error_message);
+            if status.is_client_error() {
+                return Err(anyhow::anyhow!("Client error: {}", error_message));
+            }
+            return Err(anyhow::anyhow!("Authentication failed: {}", error_message));
         }
 
+        debug!("Token authentication successful");
         Ok(())
     }
 
