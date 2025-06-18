@@ -2,7 +2,7 @@ use anyhow::Result;
 use log::{debug, error, info, trace, warn};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct User {
     pub id: u64,
     pub username: String,
@@ -131,6 +131,7 @@ impl User {
     pub async fn authenticate_user_with_token(
         token: impl AsRef<str>,
         user_agent: impl AsRef<str>,
+        
     ) -> Result<()> {
         debug!("Authenticating with token");
         let client = reqwest::Client::builder().danger_accept_invalid_certs(true).build()?;

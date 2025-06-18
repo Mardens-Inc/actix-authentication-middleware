@@ -2,7 +2,7 @@ use crate::user::User;
 use actix_web::dev::{forward_ready, Service};
 use actix_web::dev::{ServiceRequest, ServiceResponse, Transform};
 use actix_web::error::ErrorUnauthorized;
-use actix_web::Error;
+use actix_web::{Error, HttpMessage};
 use futures::future::{ready, LocalBoxFuture, Ready};
 use log::{debug, error, info, trace, warn};
 use std::rc::Rc;
@@ -48,14 +48,15 @@ where
 
     forward_ready!(service);
 
-    fn call(&self, req: ServiceRequest) -> Self::Future {
+    fn call(&self, mut req: ServiceRequest) -> Self::Future {
         let service = self.service.clone();
         debug!("Processing authentication middleware request");
         Box::pin(async move {
-            let user_agent = req.headers()
-                                .get("User-Agent")
-                                .and_then(|s| s.to_str().ok())
-                                .unwrap_or("Mardens Actix Auth Library");
+            let user_agent = req
+                .headers()
+                .get("User-Agent")
+                .and_then(|s| s.to_str().ok())
+                .unwrap_or("Mardens Actix Auth Library");
             let token = match req.headers().get("X-Authentication") {
                 Some(auth_header) => {
                     trace!("Found X-Authentication header");
@@ -77,15 +78,20 @@ where
             match token {
                 Some(token) => {
                     debug!("Authentication token found, attempting to authenticate");
-                    if let Err(e) = User::authenticate_user_with_token(&token, &user_agent).await {
-                        error!("Failed to authenticate user: {}", e.to_string());
-                        Err(ErrorUnauthorized(format!(
-                            "Failed to authenticate user: {}",
-                            e.to_string()
-                        )))
-                    } else {
-                        info!("User successfully authenticated, proceeding with request");
-                        service.call(req).await
+                    match User::authenticate_user_with_token(&token, &user_agent).await {
+                        Ok(user) => {
+                            info!("User successfully authenticated, proceeding with request");
+                            // Store the authenticated user in request extensions
+                            req.extensions_mut().insert(user);
+                            service.call(req).await
+                        }
+                        Err(e) => {
+                            error!("Failed to authenticate user: {}", e.to_string());
+                            Err(ErrorUnauthorized(format!(
+                                "Failed to authenticate user: {}",
+                                e.to_string()
+                            )))
+                        }
                     }
                 }
                 _ => {
@@ -94,5 +100,29 @@ where
                 }
             }
         })
+    }
+}
+
+use actix_web::{dev::Payload, FromRequest, HttpRequest};
+
+pub struct AuthenticatedUser(pub User);
+
+impl FromRequest for AuthenticatedUser {
+    type Error = Error;
+    type Future = Ready<Result<Self, Self::Error>>;
+
+    fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
+        match req.extensions().get::<User>() {
+            Some(user) => ready(Ok(AuthenticatedUser(user.clone()))),
+            None => ready(Err(ErrorUnauthorized("User not authenticated"))),
+        }
+    }
+}
+
+impl std::ops::Deref for AuthenticatedUser {
+    type Target = User;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
