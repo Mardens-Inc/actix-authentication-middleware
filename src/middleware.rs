@@ -1,3 +1,4 @@
+use actix_web::{dev::Payload, FromRequest, HttpRequest};
 use crate::user::User;
 use actix_web::dev::{forward_ready, Service};
 use actix_web::dev::{ServiceRequest, ServiceResponse, Transform};
@@ -103,7 +104,6 @@ where
     }
 }
 
-use actix_web::{dev::Payload, FromRequest, HttpRequest};
 
 pub struct AuthenticatedUser(pub User);
 
