@@ -105,24 +105,31 @@ where
 }
 
 
-pub struct AuthenticatedUser(pub User);
-
-impl FromRequest for AuthenticatedUser {
+impl FromRequest for User {
     type Error = Error;
     type Future = Ready<Result<Self, Self::Error>>;
 
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
         match req.extensions().get::<User>() {
-            Some(user) => ready(Ok(AuthenticatedUser(user.clone()))),
+            Some(user) => ready(Ok(User {
+                id: user.id,
+                username: user.username.clone(),
+                password: user.password.clone(),
+                reg_date: user.reg_date.clone(),
+                last_online: user.last_online.clone(),
+                last_ip: user.last_ip.clone(),
+                last_user_agent: user.last_user_agent.clone(),
+                is_admin: user.is_admin
+            })),
             None => ready(Err(ErrorUnauthorized("User not authenticated"))),
         }
     }
 }
 
-impl std::ops::Deref for AuthenticatedUser {
+impl std::ops::Deref for User {
     type Target = User;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self
     }
 }
