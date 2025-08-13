@@ -119,7 +119,7 @@ impl FromRequest for User {
                 last_online: user.last_online.clone(),
                 last_ip: user.last_ip.clone(),
                 last_user_agent: user.last_user_agent.clone(),
-                is_admin: user.is_admin,
+                admin: user.admin,
             })),
             None => ready(Err(ErrorUnauthorized("User not authenticated"))),
         }

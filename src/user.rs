@@ -9,12 +9,11 @@ pub struct User {
     pub id: u64,
     pub username: String,
     pub password: String,
-    pub reg_date: String,
-    pub last_online: String,
+    pub reg_date: chrono::DateTime<chrono::Utc>,
+    pub last_online: chrono::DateTime<chrono::Utc>,
     pub last_ip: String,
     pub last_user_agent: String,
-    #[serde(rename = "admin")]
-    pub is_admin: bool,
+    pub admin: bool,
 }
 
 impl User {

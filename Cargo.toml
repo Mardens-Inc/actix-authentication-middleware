@@ -1,6 +1,6 @@
 [package]
 name = "actix-authentication-middleware"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2024"
 
 [dependencies]
@@ -12,8 +12,9 @@ reqwest = { version = ">=0.12", features = ["json", "multipart"] }
 anyhow = ">=1"
 log = { version = ">=0.4" }
 database-common-lib = { git = "https://github.com/Mardens-Inc/database-common-lib.git" }
-sqlx = { version = "0.8.6", features = ["mysql", "runtime-tokio"] }
-base64 = {version = "0.22.1"}
+sqlx = { version = "0.8.6", features = ["mysql", "runtime-tokio", "chrono"] }
+chrono = { version = "0.4.41", features = ["serde"] }
+base64 = { version = "0.22.1" }
 
 [dev-dependencies]
 tokio = { version = "1.45.1", features = ["macros"] }

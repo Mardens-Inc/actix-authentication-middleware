@@ -7,7 +7,7 @@ use sqlx::ConnectOptions;
 
 impl User {
     pub async fn get_user_from_token(token: impl Into<String>) -> Result<Option<User>> {
-        let value = BASE64_STANDARD.decode(&token.into())?;
+        let value = BASE64_STANDARD.decode(token.into())?;
         let value = String::from_utf8(value)?;
         let value: serde_json::Value = serde_json::from_str(&value)?;
         let username: String = value
@@ -25,11 +25,10 @@ impl User {
             .password(&conn_data.password)
             .database("auth");
         let pool = MySqlPoolOptions::new().connect_with(options).await?;
-        let user: Option<User> =
-            sqlx::query_as(r#"select * from users where username = ? limit 1"#)
-                .bind(&username)
-                .fetch_optional(&pool)
-                .await?;
+        let user = sqlx::query_as::<_, User>(r#"SELECT * FROM users WHERE username = ? LIMIT 1"#)
+            .bind(username)
+            .fetch_optional(&pool)
+            .await?;
 
         Ok(user)
     }
