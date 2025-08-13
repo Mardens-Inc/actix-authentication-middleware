@@ -2,8 +2,9 @@ use anyhow::Result;
 use log::{debug, error, info, trace, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sqlx::FromRow;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, FromRow)]
 pub struct User {
     pub id: u64,
     pub username: String,
@@ -182,6 +183,7 @@ impl User {
         }
 
         debug!("Token authentication successful");
+
         Ok(())
     }
 

@@ -1,9 +1,10 @@
-use actix_web::{dev::Payload, FromRequest, HttpRequest};
 use crate::user::User;
 use actix_web::dev::{forward_ready, Service};
 use actix_web::dev::{ServiceRequest, ServiceResponse, Transform};
 use actix_web::error::ErrorUnauthorized;
+use actix_web::{dev::Payload, FromRequest, HttpRequest};
 use actix_web::{Error, HttpMessage};
+use anyhow::Result;
 use futures::future::{ready, LocalBoxFuture, Ready};
 use log::{debug, error, info, trace, warn};
 use std::rc::Rc;
@@ -49,7 +50,7 @@ where
 
     forward_ready!(service);
 
-    fn call(&self, mut req: ServiceRequest) -> Self::Future {
+    fn call(&self, req: ServiceRequest) -> Self::Future {
         let service = self.service.clone();
         debug!("Processing authentication middleware request");
         Box::pin(async move {
@@ -79,20 +80,20 @@ where
             match token {
                 Some(token) => {
                     debug!("Authentication token found, attempting to authenticate");
-                    match User::authenticate_user_with_token(&token, &user_agent).await {
-                        Ok(user) => {
-                            info!("User successfully authenticated, proceeding with request");
-                            // Store the authenticated user in request extensions
-                            req.extensions_mut().insert(user);
-                            service.call(req).await
-                        }
-                        Err(e) => {
-                            error!("Failed to authenticate user: {}", e.to_string());
-                            Err(ErrorUnauthorized(format!(
-                                "Failed to authenticate user: {}",
-                                e.to_string()
-                            )))
-                        }
+                    if let Err(e) = User::authenticate_user_with_token(&token, &user_agent).await {
+                        error!("Failed to authenticate user: {}", e);
+                        Err(ErrorUnauthorized(format!(
+                            "Failed to authenticate user: {}",
+                            e
+                        )))
+                    } else if let Ok(Some(user)) = User::get_user_from_token(&token).await {
+                        info!("User successfully authenticated, proceeding with request");
+                        // Store the authenticated user in request extensions
+                        req.extensions_mut().insert(user);
+                        service.call(req).await
+                    } else {
+                        warn!("Request rejected: Invalid authentication token");
+                        Err(ErrorUnauthorized("Invalid authentication token"))
                     }
                 }
                 _ => {
@@ -103,7 +104,6 @@ where
         })
     }
 }
-
 
 impl FromRequest for User {
     type Error = Error;
@@ -119,7 +119,7 @@ impl FromRequest for User {
                 last_online: user.last_online.clone(),
                 last_ip: user.last_ip.clone(),
                 last_user_agent: user.last_user_agent.clone(),
-                is_admin: user.is_admin
+                is_admin: user.is_admin,
             })),
             None => ready(Err(ErrorUnauthorized("User not authenticated"))),
         }
@@ -131,5 +131,19 @@ impl std::ops::Deref for User {
 
     fn deref(&self) -> &Self::Target {
         &self
+    }
+}
+
+pub trait UserRequestExt {
+    fn get_user(&self) -> Result<User>;
+}
+impl UserRequestExt for HttpRequest {
+    fn get_user(&self) -> Result<User> {
+        let user = self.extensions().get::<User>().cloned();
+        if let Some(user) = user {
+            Ok(user)
+        } else {
+            Err(anyhow::anyhow!("User doesn't exist or token is invalid"))
+        }
     }
 }
