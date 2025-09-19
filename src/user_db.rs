@@ -18,6 +18,7 @@ impl User {
             .to_string();
 
         let conn_data = DatabaseConnectionData::get().await?;
+        
         let options = MySqlConnectOptions::new()
             .log_statements(log::LevelFilter::Trace)
             .host(&conn_data.host)

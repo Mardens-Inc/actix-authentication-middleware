@@ -80,20 +80,29 @@ where
             match token {
                 Some(token) => {
                     debug!("Authentication token found, attempting to authenticate");
-                    if let Err(e) = User::authenticate_user_with_token(&token, &user_agent).await {
-                        error!("Failed to authenticate user: {}", e);
-                        Err(ErrorUnauthorized(format!(
-                            "Failed to authenticate user: {}",
-                            e
-                        )))
-                    } else if let Ok(Some(user)) = User::get_user_from_token(&token).await {
-                        info!("User successfully authenticated, proceeding with request");
-                        // Store the authenticated user in request extensions
-                        req.extensions_mut().insert(user);
-                        service.call(req).await
-                    } else {
-                        warn!("Request rejected: Invalid authentication token");
-                        Err(ErrorUnauthorized("Invalid authentication token"))
+                    match User::authenticate_user_with_token(&token, &user_agent).await {
+                        Err(e) => {
+                            error!("Failed to authenticate user: {}", e);
+                            Err(ErrorUnauthorized(format!(
+                                "Failed to authenticate user: {}",
+                                e
+                            )))
+                        }
+                        Ok(()) => match User::get_user_from_token(&token).await {
+                            Ok(Some(user)) => {
+                                info!("User successfully authenticated, proceeding with request");
+                                req.extensions_mut().insert(user);
+                                service.call(req).await
+                            }
+                            Err(e) => {
+                                warn!("Request rejected: Invalid authentication token: {}", e);
+                                Err(ErrorUnauthorized(format!("Invalid authentication token: {}", e)))
+                            }
+                            _=>{
+                                warn!("Request rejected: Invalid authentication token");
+                                Err(ErrorUnauthorized("Invalid authentication token"))
+                            }
+                        }
                     }
                 }
                 _ => {
