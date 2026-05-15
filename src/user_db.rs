@@ -24,6 +24,7 @@ impl User {
             .host(&conn_data.host)
             .username(&conn_data.user)
             .password(&conn_data.password)
+            .port(conn_data.port.unwrap_or(3306))
             .database("auth");
         let pool = MySqlPoolOptions::new().connect_with(options).await?;
         let user = sqlx::query_as::<_, User>(r#"SELECT * FROM users WHERE username = ? LIMIT 1"#)
